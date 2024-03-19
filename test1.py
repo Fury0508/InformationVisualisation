@@ -107,8 +107,7 @@ def main():
 
     # Display the charts in Streamlit
     st.altair_chart(combined_charts, use_container_width=True)
-    st.beta_set_page_config(page_title="Your App Title") 
-    st.beta_save_as_html("system1.html")
+
 if __name__ == "__main__":
     main()
 

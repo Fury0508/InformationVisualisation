@@ -5,7 +5,7 @@ import altair as alt
 
 
 # Assuming you've adjusted the file path to the actual location of your Excel file
-data = pd.read_excel('cleaned_data.xlsx')
+data = pd.read_csv('cleaned_data.xlsx')
 
 # Define the age bins and labels for age_group
 bins = [0, 18, 35, 60, 75, 100]

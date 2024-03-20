@@ -14,7 +14,7 @@ def main():
 
     # Filter by favorite genres
     fav_genres = dataset['Fav genre'].unique()
-    selected_genres = st.multiselect("Select Favorite Genres", fav_genres, default=fav_genres)
+    selected_genres = st.multiselect("Select Favorite Genres", fav_genres, default=['Classical','Rock'])
 
     # Apply filters
     filtered_dataset = dataset[dataset[selected_disorder] != 0]

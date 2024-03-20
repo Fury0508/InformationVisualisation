@@ -3,7 +3,7 @@ import pandas as pd
 import altair as alt
 
 # Assuming you've adjusted the file path to the actual location of your Excel file
-data = pd.read_csv('cleaned_data.csv')
+data = pd.read_excel('cleaned_data.xlsx')
 
 # Define the age bins and labels for age_group
 bins = [0, 18, 35, 60, 75, 100]
@@ -28,6 +28,9 @@ def main():
     # Create a selection brush for the bar chart
     brush = alt.selection_interval(encodings=['x'])
 
+    # color_scale_bar = alt.Scale(range=['#1f77b4', '#aec7e8', '#7fbfff', '#4d94ff', '#0066cc'])
+    color_scale_bar = alt.Scale(range = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'])
+
     # Create the vertical bar chart for age_group
     bar_chart = alt.Chart(filtered_data).mark_bar().encode(
         x='age_group',
@@ -36,18 +39,20 @@ def main():
         # Tooltip for age_group
         tooltip=['age_group'],
         # Set title to None for legend
-        color=alt.Color('age_group', legend=alt.Legend(title=None)),
+        color=alt.Color('age_group', legend=alt.Legend(title=None), scale=color_scale_bar),  # Apply the new color scale
     ).add_params(
         brush
     ).properties(
         width=400
     )
 
+    color_scale_box = alt.Scale(domain=labels, range=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'])
+
     # Create a box plot for BPM vs age_group
     bpm_box_plot = alt.Chart(filtered_data).mark_boxplot().encode(
         x='age_group',
         y='BPM',
-        color=alt.condition(brush, 'age_group', alt.value('lightgray')),
+        color=alt.condition(brush, 'age_group', alt.value('lightgray'), scale=color_scale_box),
         tooltip=['age_group', 'BPM']
     ).transform_filter(
         brush
@@ -55,11 +60,18 @@ def main():
         width=400
     )
 
+
+    # Define the color scale for the line chart
+    color_scale_line = alt.Scale(domain=labels, range=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'])
+
+
+
     # Create a line chart for Primary streaming service vs age_group
     line_chart = alt.Chart(filtered_data).mark_line().encode(
         x='Primary streaming service',
         y='count()',
-        color='age_group'
+        color=alt.Color('age_group', scale=color_scale_line),  # Use the new color scale here
+        tooltip=['age_group', 'count()']
     ).transform_filter(
         brush
     ).properties(
@@ -101,6 +113,16 @@ def main():
     ).properties(
         width=400
     ).interactive()
+
+    # Define the legend with custom symbol shapes
+    # legend_symbols = alt.Chart(filtered_data).mark_point(size=100, filled=True).encode(
+    #     y=alt.Y('Primary streaming service:N', axis=alt.Axis(orient='right'), title='Streaming Service'),
+    #     shape=alt.Shape('Primary streaming service', legend=None,
+    #                     scale=alt.Scale(domain=list(mark_shapes.keys()), range=list(mark_shapes.values())))
+    # ).properties(
+    #     title='Legend'
+    # )
+
 
     # Combine the charts into two rows
     combined_charts = alt.vconcat(

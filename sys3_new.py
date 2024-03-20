@@ -1,145 +1,105 @@
-import streamlit as st
-import altair as alt
 import pandas as pd
-def butterfly_chart_vis(data):
-    filtered_data = data[data['Music effects'].isin(['Improve', 'Worsen'])]
-    effect_counts = filtered_data.groupby(['Fav genre', 'Music effects', 'Age_Group']).size().reset_index(name='Count')
-    pivot_data = effect_counts.pivot_table(index=['Fav genre', 'Age_Group'], columns='Music effects', values='Count', fill_value=0).reset_index()
-    pivot_data['Worsen'] = pivot_data['Worsen'] * -1
-    melted_data = pivot_data.melt(id_vars=['Fav genre', 'Age_Group'], value_vars=['Improve', 'Worsen'], var_name='Music effects', value_name='Count')
+import altair as alt
+import streamlit as st
 
-    streaming_services = alt.selection_single(
-        fields=['Age_Group'],
-        bind=alt.binding_select(options=sorted(data['Age_Group'].unique().tolist()), name='Age Group'),
-        name="selector"
+def main():
+    # Load data
+    dataset = pd.read_csv("mxmh_survey_results.csv")
+    dataset['Age_Group'] = pd.cut(dataset['Age'], bins=[0, 18, 35, 60, 75, 100],
+                                  labels=['Early Years', 'Young Adults', 'Middle Age', 'Mature Adults', 'Elderly'])
+
+    # Filter by mental disorder
+    mental_disorders = ["OCD", "Depression", "Anxiety", "Insomnia"]
+    selected_disorder = st.selectbox("Select Mental Disorder", mental_disorders)
+
+    # Filter by favorite genres
+    fav_genres = dataset['Fav genre'].unique()
+    selected_genres = st.multiselect("Select Favorite Genres", fav_genres, default=fav_genres)
+
+    # Apply filters
+    filtered_dataset = dataset[dataset[selected_disorder] != 0]
+    if selected_genres:
+        filtered_dataset = filtered_dataset[filtered_dataset['Fav genre'].isin(selected_genres)]
+
+    # Count the occurrences of each genre within each Age_Group
+    age_groups = filtered_dataset.groupby(['Age_Group', 'Fav genre']).size().unstack(fill_value=0).reset_index()
+    age_groups = pd.melt(age_groups, id_vars='Age_Group', var_name='Fav genre', value_name='Count')
+
+    # Create initial chart with brush selection
+    brush = alt.selection_interval(encodings=['x'], name='brush')
+    chart = alt.Chart(age_groups).mark_bar(size=20).encode(
+        x=alt.X('Age_Group:N', title='Age Group'),
+        y=alt.Y('Count:Q', title='Number of Records'),
+        color='Fav genre:N',
+        column='Fav genre:N',
+        tooltip=['Age_Group', 'Fav genre', 'Count:Q']
+    ).properties(
+        title='Distribution of Genre in each Age Group',
+
+    ).add_selection(brush)
+
+    # Create line chart based on genre selection from the initial chart
+    selected_genre = alt.selection_multi(fields=['Fav genre'])
+    genre_chart = alt.Chart(age_groups).mark_line().encode(
+        x=alt.X('Age_Group:N', title='Age Group'),
+        y=alt.Y('Count:Q', title='Number of Records'),
+        color='Fav genre:N',
+        tooltip=['Age_Group', 'Fav genre', 'Count:Q']
+    ).transform_filter(
+        selected_genre
+    ).transform_filter(
+        brush
+    ).properties(
+        title='Distribution of Genre in each Age Group for selected genre',
+        width=500,
+        height=400
     )
 
-    butterfly_chart = alt.Chart(melted_data).mark_bar().encode(
-        y=alt.Y('Fav genre:N', title='Preferred Genre'),
-        x=alt.X('Count:Q', title='Effect Value'),
-        color=alt.Color('Music effects:N', legend=alt.Legend(title="Music Effects")),
-        tooltip=['Fav genre', 'Music effects', 'Count:Q']
+    # Calculate the percentage distribution of Music effects within the selected age group
+    selected_age_group = alt.selection_interval(encodings=['x'], name='brush')
+    music_effects = filtered_dataset.groupby(['Age_Group', 'Music effects']).size().unstack(fill_value=0).apply(
+        lambda x: x / x.sum(), axis=1).stack().reset_index(name='Percentage')
+    music_effects['Percentage'] *= 100
+
+    # Create heatmap for Music effects chart
+    music_effects_chart = alt.Chart(music_effects).mark_rect().encode(
+        x=alt.X('Age_Group:N', title='Age Group'),
+        y=alt.Y('Music effects:N', title='Music Effects'),
+        color=alt.Color('Percentage:Q', title='Percentage'),
+        tooltip=['Age_Group', 'Music effects', 'Percentage:Q']
     ).transform_filter(
-        streaming_services
+        selected_age_group
     ).properties(
-        width=1200,
-        title="Comparison of Improve and Weaken Effects by Genre"
-    ).add_params(
-        streaming_services
-    ).interactive()
+        title='Distribution of Music Effects in selected Age Group',
+        width=500,
+        height=400
+    )
 
-    return butterfly_chart
-# Load your data
-music_data = pd.read_csv('mxmh_survey_results.csv')
+    severity_chart = alt.Chart(filtered_dataset).mark_bar().encode(
+        x=alt.X(selected_disorder + ':Q', title='Severity'),
+        y=alt.Y('count():Q', title='Number of Records'),
+        tooltip=[alt.Tooltip(selected_disorder + ':Q', title='Severity'),
+                 alt.Tooltip('count()', title='Number of Records')]
+    ).transform_filter(
+        brush
+    ).transform_filter(
+        selected_genre
+    ).transform_filter(
+        selected_age_group
+    ).properties(
+        title=f'Distribution of Severity for {selected_disorder}',
+        width=500,
+        height=400
+    )
 
-# Handling NaN values in 'Age_Group' and converting to string
-music_data['Age_Group'] = pd.cut(music_data['Age'], bins=[0, 18, 35, 60, 75, 100],
-                                  labels=['Early Years', 'Young Adults', 'Middle Age', 'Mature Adults', 'Elderly'])
-music_data['Age_Group'] = music_data['Age_Group'].astype(str).fillna('Not Specified')
+    # Combine all charts
+    first_layer = alt.hconcat(chart, genre_chart).add_selection(selected_genre)
 
-# Calculate the total disorder score
-music_data['Total Disorder Score'] = music_data[['Anxiety', 'Depression', 'Insomnia', 'OCD']].count(axis=1)
+    second_layer = alt.hconcat( music_effects_chart, severity_chart)
 
-# Group data for the pie chart
-effectiveness_data = music_data.groupby(['Fav genre', 'Music effects', 'Anxiety', 'Depression', 'Insomnia', 'OCD']).size().reset_index(name='Counts')
+    final_chart = alt.vconcat(first_layer, second_layer)
 
-# Convert 'Fav genre' to string and handle NaNs
-music_data['Fav genre'] = music_data['Fav genre'].astype(str).fillna('Unknown')
- 
-# Create Altair selection elements
-fav_genre = alt.selection_single(
-    fields=['Fav genre'],
-    bind=alt.binding_select(options=sorted(music_data['Fav genre'].unique().tolist()), name='Fav Genre'),
-    name="fav_genre_selector"
-)
-age_groups = alt.selection_single(
-    fields=['Age_Group'],
-    bind=alt.binding_select(options=sorted(music_data['Age_Group'].unique().tolist()), name='Age Group'),
-    name="age_group_selector"
-)
-anxiety_selector = alt.selection_single(
-    fields=['Anxiety'],
-    bind=alt.binding_range(min=0, max=10, step=1, name='Anxiety Level'),
-    name="anxiety_selector"
-)
-depression_selector = alt.selection_single(
-    fields=['Depression'],
-    bind=alt.binding_range(min=0, max=10, step=1, name='Depression Level'),
-    name="depression_selector"
-)
-insomnia_selector = alt.selection_single(
-    fields=['Insomnia'],
-    bind=alt.binding_range(min=0, max=10, step=1, name='Insomnia Level'),
-    name="insomnia_selector"
-)
-ocd_selector = alt.selection_single(
-    fields=['OCD'],
-    bind=alt.binding_range(min=0, max=10, step=1, name='OCD Level'),
-    name="ocd_selector"
-)
+    st.altair_chart(final_chart)
 
-# Altair bar chart
-bar_chart = alt.Chart(music_data).mark_bar().encode(
-    x=alt.X('Fav genre:N', title='Favorite Genre'),
-    y=alt.Y('sum(Total Disorder Score):Q', title='Total Disorder Scores'),
-    color='Fav genre:N',
-    tooltip=['Fav genre:N', 'sum(Total Disorder Score):Q']
-).add_selection(
-    fav_genre,
-    age_groups,
-    anxiety_selector,
-    depression_selector,
-    insomnia_selector,
-    ocd_selector
-).transform_filter(
-    fav_genre
-).transform_filter(
-    age_groups
-).transform_filter(
-    anxiety_selector
-).transform_filter(
-    depression_selector
-).transform_filter(
-    insomnia_selector
-).transform_filter(
-    ocd_selector
-).properties(
-    title="Total Disorder Scores per Favorite Genre",
-    width=600
-)
-
-# Altair pie chart
-pie_chart = alt.Chart(effectiveness_data).mark_arc().encode(
-    theta=alt.Theta(field="Counts", type="quantitative", stack=True),
-    color=alt.Color('Music effects:N', legend=None),
-    tooltip=['Fav genre:N', 'Music effects:N', 'Counts:Q']
-).add_selection(
-    fav_genre,
-    age_groups,
-    anxiety_selector,
-    depression_selector,
-    insomnia_selector,
-    ocd_selector
-).transform_filter(
-    fav_genre
-).transform_filter(
-    age_groups
-).transform_filter(
-    anxiety_selector
-).transform_filter(
-    depression_selector
-).transform_filter(
-    insomnia_selector
-).transform_filter(
-    ocd_selector
-).properties(
-    title="Effectiveness of Favorite Genre per Mental Disorder",
-    width=600
-)
-butterfly_chart = butterfly_chart_vis(music_data)
-st.altair_chart(butterfly_chart)
-# Combine the charts into a single dashboard
-dashboard = alt.hconcat(pie_chart, bar_chart, spacing=30).resolve_legend(color='independent')
-
-# Display the dashboard in Streamlit
-st.altair_chart(dashboard, use_container_width=True)
+if __name__ == "__main__":
+    main()

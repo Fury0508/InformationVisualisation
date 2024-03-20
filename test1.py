@@ -1,67 +1,56 @@
-
 import streamlit as st
 import pandas as pd
 import altair as alt
-
 
 # Assuming you've adjusted the file path to the actual location of your Excel file
 data = pd.read_csv('cleaned_data.csv')
 
 # Define the age bins and labels for age_group
 bins = [0, 18, 35, 60, 75, 100]
-labels = ['Early Years', 'Young Adults', 'Middle Age', 'Mature Adults', 'Elderly']
+labels = ['Early Years[0-18]', 'Young Adults[18-35]', 'Middle Age[35-60]', 'Mature Adults[60-75]', 'Elderly[75-100]']
 data['age_group'] = pd.cut(data['Age'], bins=bins, labels=labels, right=False)
+
 
 # Streamlit app
 def main():
-    st.title("System 1")
+    st.title("Streaming Service Visualization with Age-Groups")
 
-    # Dropdown to select 'While working' condition with 'Both' as the default value
+    # Dropdown to select 'While working' condition without 'Both' option
     working_condition = st.selectbox(
         'Select Working Condition:',
-        options=['Yes', 'No', 'Both'],
-        index=2  # 'Both' is at the 2nd index of the options list
+        options=['Yes', 'No'],
+        index=0  # 'Yes' is at the 0th index of the options list
     )
 
     # Filter data based on selected 'While working' condition
-    if working_condition != 'Both':
-        filtered_data = data[data['While working'] == working_condition]
-    else:
-        filtered_data = data
+    filtered_data = data[data['While working'] == working_condition]
 
-    # Create a multi-selection tool for the bar chart
-    selection = alt.selection_multi(fields=['age_group'], nearest=True)
+    # Create a selection brush for the bar chart
     brush = alt.selection_interval(encodings=['x'])
+
     # Create the vertical bar chart for age_group
     bar_chart = alt.Chart(filtered_data).mark_bar().encode(
         x='age_group',
         y='count()',
-        #color=alt.condition(selection, 'age_group', alt.value('lightgray'), legend=alt.Legend(title="Age Groups")),
-        opacity=alt.condition(selection, alt.value(0.6), alt.value(0.6))
+        opacity=alt.condition(brush, alt.value(0.6), alt.value(0.6)),
+        # Tooltip for age_group
+        tooltip=['age_group'],
+        # Set title to None for legend
+        color=alt.Color('age_group', legend=alt.Legend(title=None)),
     ).add_params(
-        selection
+        brush
     ).properties(
         width=400
     )
 
-    # Create a line chart for BPM vs age_group
-    # bpm_line_chart = alt.Chart(filtered_data).mark_line().encode(
-    #     x='age_group',
-    #     y='BPM',
-    #     color='age_group'
-    # ).transform_filter(
-    #     selection
-    # ).properties(
-    #     width=400
-    # )
-
-    bpm_line_chart = alt.Chart(filtered_data).mark_boxplot().encode(
-    x='age_group',
-    y='BPM',
-    color=alt.condition(selection, 'age_group', alt.value('lightgray')),
-    tooltip=['age_group', 'BPM']
+    # Create a box plot for BPM vs age_group
+    bpm_box_plot = alt.Chart(filtered_data).mark_boxplot().encode(
+        x='age_group',
+        y='BPM',
+        color=alt.condition(brush, 'age_group', alt.value('lightgray')),
+        tooltip=['age_group', 'BPM']
     ).transform_filter(
-        selection
+        brush
     ).properties(
         width=400
     )
@@ -72,42 +61,56 @@ def main():
         y='count()',
         color='age_group'
     ).transform_filter(
-        selection
+        brush
     ).properties(
         width=400
     )
 
+    # Define the shape of marks for different streaming services
+    mark_shapes = {
+        'Spotify': 'circle',
+        'Pandora': 'square',
+        'YouTube Music': 'triangle-up',
+        'Apple Music': 'cross',
+        'Others': 'diamond',
+        'No Streaming Service': 'hexagon'
+        # Add more streaming services and corresponding shapes as needed
+    }
 
+    # Define the color scale
+    # Define the color scale for all streaming services with easy-to-interpret colors
+    color_scale = alt.Scale(
+        domain=['Spotify', 'Pandora', 'YouTube Music', 'Apple Music', 'Others', 'No Streaming Service'],
+        range=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b'])
 
-    legend_selection = alt.selection_multi(fields=['Primary streaming service'], bind='legend')
-
-# Create the bubble chart with both original and legend selections
-    hours_chart = alt.Chart(filtered_data).mark_circle().encode(
+    # Create the scatter plot with custom mark shapes
+    scatter_plot = alt.Chart(filtered_data).mark_point().encode(
         x='Age:Q',
         y='Hours per day',
-        color='Primary streaming service',
-        size='count()',
-        tooltip=['age_group', 'Hours per day', 'Primary streaming service', 'count()'],
+        color=alt.Color('Primary streaming service', scale=color_scale),
+        shape=alt.Shape('Primary streaming service', legend=None,
+                        scale=alt.Scale(domain=list(mark_shapes.keys()), range=list(mark_shapes.values()))),
+        tooltip=['age_group', 'Hours per day', 'Primary streaming service'],
         opacity=alt.condition(
-            selection & legend_selection,
+            brush,
             alt.value(1),
             alt.value(0.2)
         )
-    ).add_params(
-        selection,
-        legend_selection
+    ).transform_filter(
+        brush
     ).properties(
         width=400
     ).interactive()
+
     # Combine the charts into two rows
     combined_charts = alt.vconcat(
-        alt.hconcat(bar_chart, bpm_line_chart, spacing=50).resolve_scale(color='independent'),
-        alt.hconcat(line_chart, hours_chart, spacing=50).resolve_scale(color='independent')
+        alt.hconcat(bar_chart, bpm_box_plot, spacing=50).resolve_scale(color='independent'),
+        alt.hconcat(line_chart, scatter_plot, spacing=50).resolve_scale(color='independent')
     )
 
     # Display the charts in Streamlit
     st.altair_chart(combined_charts, use_container_width=True)
 
+
 if __name__ == "__main__":
     main()
-

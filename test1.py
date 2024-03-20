@@ -43,6 +43,8 @@ def main():
     ).add_params(
         brush
     ).properties(
+        title="Age Group Distribution" , # Title added here
+
         width=400
     )
 
@@ -57,6 +59,7 @@ def main():
     ).transform_filter(
         brush
     ).properties(
+        title="BPM Distribution by Age Group",
         width=400
     )
 
@@ -75,7 +78,8 @@ def main():
     ).transform_filter(
         brush
     ).properties(
-        width=400
+        title="Primary Streaming Service by Age Group",
+    width=400
     )
 
     # Define the shape of marks for different streaming services
@@ -111,7 +115,9 @@ def main():
     ).transform_filter(
         brush
     ).properties(
+        title="Hours per Day vs Age with Primary Streaming Service",
         width=400
+         # Title added here
     ).interactive()
 
     # Define the legend with custom symbol shapes

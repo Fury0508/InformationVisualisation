@@ -7,7 +7,7 @@ def main():
     dataset = pd.read_csv("mxmh_survey_results.csv")
     dataset['Age_Group'] = pd.cut(dataset['Age'], bins=[0, 18, 35, 60, 75, 100],
                                   labels=['Early Years', 'Young Adults', 'Middle Age', 'Mature Adults', 'Elderly'])
-
+    st.title("Potential effects of music on mental health")
     # Filter by mental disorder
     mental_disorders = ["OCD", "Depression", "Anxiety", "Insomnia"]
     selected_disorder = st.selectbox("Select Mental Disorder", mental_disorders)
